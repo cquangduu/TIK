@@ -1,0 +1,213 @@
+name: DAILY KOREAN - Auto Render Videos
+
+on:
+  # Chạy thủ công
+  workflow_dispatch:
+  
+  # Chạy tự động mỗi ngày lúc 6:00 AM UTC (13:00 VN)
+  schedule:
+    - cron: '0 6 * * *'
+
+env:
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+  AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
+  AZURE_SPEECH_REGION: ${{ secrets.AZURE_SPEECH_REGION }}
+  PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+
+jobs:
+  generate-content:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: 📦 Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: 🎯 Generate content (Phase 1-5)
+        run: |
+          python -c "
+          from main import (
+              fetch_rss_news, 
+              generate_model_essay, 
+              generate_tiktok_scripts,
+              generate_deep_dive_script,
+              generate_all_audio
+          )
+          
+          print('Phase 1: Fetching news...')
+          news = fetch_rss_news()
+          
+          print('Phase 2: Generating essay...')
+          essay = generate_model_essay(news)
+          
+          print('Phase 3: Generating TikTok scripts...')
+          tiktok = generate_tiktok_scripts(news, essay)
+          
+          print('Phase 4: Generating Deep Dive...')
+          deep_dive = generate_deep_dive_script(news, essay)
+          
+          print('Phase 5: Generating audio...')
+          generate_all_audio()
+          
+          print('✅ Content generation complete!')
+          "
+      
+      - name: 📤 Upload content artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: content-data
+          path: |
+            topik-video/public/final_data.json
+            topik-video/public/assets/
+          retention-days: 1
+
+  render-videos:
+    needs: generate-content
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 📥 Download content
+        uses: actions/download-artifact@v4
+        with:
+          name: content-data
+          path: topik-video/public/
+      
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: topik-video/package-lock.json
+      
+      - name: 📦 Install Node dependencies
+        working-directory: topik-video
+        run: npm ci --legacy-peer-deps
+      
+      - name: 🎬 Render TikTok Video 1 - News
+        working-directory: topik-video
+        run: |
+          npx remotion render TikTok-NewsHealing \
+            --props="public/final_data.json" \
+            --output="public/V1_News.mp4" \
+            --concurrency=1 \
+            --gl=swangle
+      
+      - name: 🎬 Render TikTok Video 2 - Essay
+        working-directory: topik-video
+        run: |
+          npx remotion render TikTok-WritingCoach \
+            --props="public/final_data.json" \
+            --output="public/V2_Essay.mp4" \
+            --concurrency=1 \
+            --gl=swangle
+      
+      - name: 🎬 Render TikTok Video 3 - Vocab Quiz
+        working-directory: topik-video
+        run: |
+          npx remotion render TikTok-QuizVocab \
+            --props="public/final_data.json" \
+            --output="public/V3_Quiz.mp4" \
+            --concurrency=1 \
+            --gl=swangle
+      
+      - name: 🎬 Render TikTok Video 4 - Grammar Quiz
+        working-directory: topik-video
+        run: |
+          npx remotion render TikTok-QuizGrammar \
+            --props="public/final_data.json" \
+            --output="public/V4_Grammar.mp4" \
+            --concurrency=1 \
+            --gl=swangle
+      
+      - name: 🎬 Render YouTube Deep Dive
+        working-directory: topik-video
+        run: |
+          npx remotion render YouTube-DeepDive \
+            --props="public/final_data.json" \
+            --output="public/V5_DeepDive.mp4" \
+            --concurrency=1 \
+            --gl=swangle
+      
+      - name: 📤 Upload videos
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-videos
+          path: topik-video/public/*.mp4
+          retention-days: 7
+
+  upload-distribute:
+    needs: render-videos
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 📥 Download videos
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-videos
+          path: topik-video/public/
+      
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: 📦 Install dependencies
+        run: pip install -r requirements.txt
+      
+      # Upload to Google Drive (if configured)
+      - name: ☁️ Upload to Google Drive
+        if: ${{ secrets.DRIVE_FOLDER_ID != '' }}
+        env:
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: |
+          echo "$GOOGLE_CREDENTIALS" > credentials.json
+          python -c "
+          from youtube_uploader import upload_to_drive
+          # upload_to_drive()
+          print('Drive upload - implement based on your setup')
+          "
+      
+      # Deploy blog to GitHub Pages
+      - name: 📝 Generate Blog
+        run: |
+          python -c "
+          from blog_generator import BlogGenerator
+          generator = BlogGenerator()
+          generator.generate_from_json('topik-video/public/final_data.json')
+          "
+      
+      - name: 🚀 Deploy Blog to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./blog_output
+          publish_branch: gh-pages
+      
+      - name: 📱 Send Telegram Notification
+        if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+            -d "chat_id=$TELEGRAM_CHANNEL_ID" \
+            -d "text=✅ DAILY KOREAN Pipeline hoàn thành! $(date '+%Y-%m-%d %H:%M')"

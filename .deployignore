@@ -1,0 +1,76 @@
+# ============================================
+# DAILY KOREAN - Deploy Ignore List
+# ============================================
+# Danh sách file/folder không cần upload lên VPS
+# Dùng với rsync: rsync --exclude-from='.deployignore'
+
+# ========== Node.js ==========
+node_modules/
+.npm/
+.yarn/
+.pnpm-store/
+
+# ========== Python ==========
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+env/
+.env.local
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ========== Git ==========
+.git/
+.gitignore
+
+# ========== Build outputs ==========
+build/
+dist/
+out/
+.next/
+.expo/
+
+# ========== Temp & Cache ==========
+temp_processing/
+.cache/
+.temp/
+*.tmp
+*.temp
+
+# ========== Logs ==========
+logs/
+*.log
+
+# ========== Media (được tạo mới trên VPS) ==========
+*.mp4
+*.mp3
+*.wav
+*.m4a
+
+# ========== IDE ==========
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ========== OS ==========
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ========== Test ==========
+coverage/
+.pytest_cache/
+.nyc_output/
+
+# ========== Credentials (upload riêng) ==========
+# Không loại trừ .env và tokens vì cần upload riêng
+# youtube_token.json
+# drive_token.json
+# client_secrets.json

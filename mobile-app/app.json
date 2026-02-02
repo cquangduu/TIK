@@ -1,0 +1,82 @@
+{
+  "expo": {
+    "name": "TOPIK Daily",
+    "slug": "topik-daily",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "topikdaily",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#4A90D9"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "bundleIdentifier": "com.yourcompany.topikdaily",
+      "supportsTablet": true,
+      "config": {
+        "googleMobileAdsAppId": "ca-app-pub-XXXXXXXXXXXXX~YYYYYYYYYY"
+      },
+      "infoPlist": {
+        "NSUserTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you.",
+        "SKAdNetworkItems": [
+          { "SKAdNetworkIdentifier": "cstr6suwn9.skadnetwork" },
+          { "SKAdNetworkIdentifier": "4fzdc2evr5.skadnetwork" }
+        ]
+      }
+    },
+    "android": {
+      "package": "com.yourcompany.topikdaily",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#4A90D9"
+      },
+      "permissions": [
+        "INTERNET",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED"
+      ],
+      "config": {
+        "googleMobileAdsAppId": "ca-app-pub-XXXXXXXXXXXXX~YYYYYYYYYY"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#4A90D9"
+        }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-XXXXXXXXXXXXX~YYYYYYYYYY",
+          "iosAppId": "ca-app-pub-XXXXXXXXXXXXX~YYYYYYYYYY"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "YOUR-PROJECT-ID"
+      }
+    }
+  }
+}

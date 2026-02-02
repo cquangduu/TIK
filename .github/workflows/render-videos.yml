@@ -1,0 +1,178 @@
+name: 🎬 Render TOPIK Daily Videos
+
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Date to render (YYYY-MM-DD)'
+        required: true
+        type: string
+      content_url:
+        description: 'URL to final_data.json'
+        required: false
+        type: string
+
+  # Trigger from external scheduler
+  repository_dispatch:
+    types: [render-videos]
+
+env:
+  NODE_VERSION: '20'
+  REMOTION_VERSION: '4.0'
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    strategy:
+      matrix:
+        video:
+          - name: video_1_news
+            composition: NewsHealing
+            duration: 60
+          - name: video_2_outline  
+            composition: WritingCoach
+            duration: 60
+          - name: video_3_vocab_quiz
+            composition: QuizGame-Vocab
+            duration: 45
+          - name: video_4_grammar_quiz
+            composition: QuizGame-Grammar
+            duration: 45
+          - name: video_5_deep_dive
+            composition: DeepDive
+            duration: 120
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: topik-video/package-lock.json
+
+      - name: 📦 Install dependencies
+        working-directory: topik-video
+        run: npm ci
+
+      - name: 📥 Download content data
+        run: |
+          DATE="${{ github.event.inputs.date || github.event.client_payload.date }}"
+          CONTENT_URL="${{ github.event.inputs.content_url || github.event.client_payload.content_url }}"
+          
+          mkdir -p topik-video/public
+          
+          if [ -n "$CONTENT_URL" ]; then
+            curl -L "$CONTENT_URL" -o topik-video/public/final_data.json
+          elif [ -f "data/content/$DATE/final_data.json" ]; then
+            cp "data/content/$DATE/final_data.json" topik-video/public/
+          else
+            echo "⚠️ No content found for $DATE, using sample data"
+          fi
+          
+          # Download audio files if URL provided
+          AUDIO_URL="${{ github.event.client_payload.audio_url }}"
+          if [ -n "$AUDIO_URL" ]; then
+            mkdir -p topik-video/public/audio
+            curl -L "$AUDIO_URL" -o audio.zip
+            unzip -o audio.zip -d topik-video/public/audio/
+          fi
+
+      - name: 🎬 Render ${{ matrix.video.name }}
+        working-directory: topik-video
+        run: |
+          npx remotion render \
+            --composition=${{ matrix.video.composition }} \
+            --output=out/${{ matrix.video.name }}.mp4 \
+            --codec=h264 \
+            --crf=18 \
+            --concurrency=2 \
+            --timeout=120000
+        env:
+          REMOTION_LICENSE_KEY: ${{ secrets.REMOTION_LICENSE_KEY }}
+
+      - name: 📤 Upload video artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.video.name }}
+          path: topik-video/out/${{ matrix.video.name }}.mp4
+          retention-days: 3
+
+  # Combine all videos and upload to cloud storage
+  combine-and-upload:
+    needs: render
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Download all video artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: videos/
+          pattern: video_*
+          merge-multiple: true
+
+      - name: 📋 List rendered videos
+        run: |
+          echo "📦 Rendered videos:"
+          ls -lah videos/
+
+      - name: ☁️ Upload to Cloudflare R2
+        if: ${{ secrets.R2_ACCESS_KEY != '' }}
+        run: |
+          DATE="${{ github.event.inputs.date || github.event.client_payload.date }}"
+          
+          for video in videos/*.mp4; do
+            filename=$(basename "$video")
+            aws s3 cp "$video" "s3://topik-videos/$DATE/$filename" \
+              --endpoint-url "${{ secrets.R2_ENDPOINT }}"
+          done
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
+          AWS_DEFAULT_REGION: auto
+
+      - name: 📣 Notify completion
+        if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' }}
+        run: |
+          DATE="${{ github.event.inputs.date || github.event.client_payload.date }}"
+          curl -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHANNEL_ID }}" \
+            -d text="🎬 Videos rendered successfully for $DATE! 5 videos ready for upload."
+
+      - name: 🎉 Create combined artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-videos-${{ github.event.inputs.date || github.event.client_payload.date }}
+          path: videos/
+          retention-days: 7
+
+  # Optional: Auto-upload to platforms
+  auto-upload:
+    needs: combine-and-upload
+    if: ${{ github.event.client_payload.auto_upload == true }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Download videos
+        uses: actions/download-artifact@v4
+        with:
+          name: all-videos-${{ github.event.client_payload.date }}
+          path: videos/
+
+      - name: 🎥 Upload to YouTube
+        if: ${{ secrets.YOUTUBE_REFRESH_TOKEN != '' }}
+        run: |
+          # Would use YouTube API here
+          echo "Uploading to YouTube..."
+
+      - name: 📱 Upload to TikTok
+        if: ${{ secrets.TIKTOK_ACCESS_TOKEN != '' }}
+        run: |
+          # Would use TikTok API here
+          echo "Uploading to TikTok..."
